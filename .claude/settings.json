@@ -1,0 +1,16 @@
+{
+  "extraKnownMarketplaces": {
+    "stitch-skills": {
+      "source": {
+        "source": "github",
+        "repo": "google-labs-code/stitch-skills",
+        "ref": "main"
+      }
+    }
+  },
+  "enabledPlugins": {
+    "stitch-design@stitch-skills": true,
+    "stitch-build@stitch-skills": true,
+    "stitch-utilities@stitch-skills": true
+  }
+}
