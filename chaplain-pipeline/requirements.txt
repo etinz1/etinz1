@@ -1,0 +1,4 @@
+anthropic
+elevenlabs
+pydantic
+python-dotenv
