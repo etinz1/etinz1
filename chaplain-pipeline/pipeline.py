@@ -23,7 +23,12 @@ for key in ("ANTHROPIC_API_KEY", "ELEVENLABS_API_KEY"):
     if not os.environ.get(key):
         sys.exit(f"❌ {key} is missing. Copy .env.example to .env and add your key.")
 
-claude_client = anthropic.Anthropic()  # reads ANTHROPIC_API_KEY from the environment
+# Reads ANTHROPIC_API_KEY from the environment. Keys not scoped to a workspace
+# (sk-ant-usr-...) must also name a workspace via ANTHROPIC_WORKSPACE_ID.
+workspace_id = os.environ.get("ANTHROPIC_WORKSPACE_ID")
+claude_client = anthropic.Anthropic(
+    default_headers={"anthropic-workspace-id": workspace_id} if workspace_id else None
+)
 elevenlabs_client = ElevenLabs(api_key=os.environ["ELEVENLABS_API_KEY"])
 
 CLAUDE_MODEL = "claude-opus-5-5"

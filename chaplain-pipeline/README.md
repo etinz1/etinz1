@@ -4,7 +4,7 @@ Claude writes a 45–60 second video script, then ElevenLabs turns it into a voi
 
 ## Setup
 
-1. **Get a Claude API key:** sign in at [platform.claude.com](https://platform.claude.com), add billing under **Settings → Billing**, then create a key under **Settings → API Keys**. Copy it right away; it's only shown once.
+1. **Get a Claude API key:** sign in at [platform.claude.com](https://platform.claude.com), add billing under **Settings → Billing**, then create a key under **Settings → API Keys**. Create it inside a workspace so it starts with `sk-ant-api`. Copy it right away; it's only shown once. If your key starts with `sk-ant-usr-`, also set `ANTHROPIC_WORKSPACE_ID` in `.env`.
 2. **Get an ElevenLabs API key:** in your ElevenLabs dashboard, open your profile and go to **API Keys**.
 3. **Install and configure:**
 
