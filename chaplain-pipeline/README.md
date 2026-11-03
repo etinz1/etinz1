@@ -28,6 +28,18 @@ With no topic it uses a default Pillar A topic. Each run writes two files to `ou
 - `chaplain_daily_xxxxxx.mp3`: the voiceover (hook + script)
 - `chaplain_daily_xxxxxx.json`: the script, B-roll search query, and caption style
 
+## Write now, voice later
+
+On a network that blocks ElevenLabs (but not Claude), save scripts only, then make all the MP3s later:
+
+```bash
+python pipeline.py --script-only "PILLAR D: What shalom really means"
+python pipeline.py --script-only --topics-file topics.txt   # one topic per line
+python pipeline.py --voice-pending                          # later, on another network
+```
+
+`--voice-pending` voices every saved script in `output/` that doesn't have an MP3 yet.
+
 ## Customizing
 
 - **Persona and rules:** edit `system_prompt.xml`.
