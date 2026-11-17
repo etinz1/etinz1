@@ -2,3 +2,5 @@ anthropic
 elevenlabs
 pydantic
 python-dotenv
+moviepy>=2
+requests

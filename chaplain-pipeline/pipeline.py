@@ -5,9 +5,11 @@ Usage:
     python pipeline.py --script-only "PILLAR E: Grief on an ordinary Tuesday"
     python pipeline.py --script-only --topics-file topics.txt
     python pipeline.py --voice-pending
+    python pipeline.py --video-pending
 """
 
 import argparse
+import base64
 
 import os
 import sys
@@ -101,11 +103,16 @@ def generate_daily_script(topic):
 
 
 def generate_voiceover(text, save_path):
-    """Uses ElevenLabs to generate an MP3 from the script."""
+    """Uses ElevenLabs to generate an MP3 from the script.
+
+    Returns (path, word timings for captions), or (None, None) on failure.
+    """
+    from video import words_from_alignment
+
     print("🎙️ Sending script to ElevenLabs...")
 
     try:
-        audio_stream = elevenlabs_client.text_to_speech.convert(
+        response = elevenlabs_client.text_to_speech.convert_with_timestamps(
             voice_id=VOICE_ID,
             output_format="mp3_44100_128",
             text=text,
@@ -116,17 +123,16 @@ def generate_voiceover(text, save_path):
             ),
         )
         with open(save_path, "wb") as f:
-            for chunk in audio_stream:
-                if chunk:
-                    f.write(chunk)
+            f.write(base64.b64decode(response.audio_base_64))
+        words = words_from_alignment(response.alignment) if response.alignment else None
 
         print(f"✅ Voiceover saved to: {save_path}\n")
-        return save_path
+        return save_path, words
 
     except Exception as e:
         print(f"❌ ElevenLabs Error: {e}")
         Path(save_path).unlink(missing_ok=True)  # don't leave a half-written MP3
-        return None
+        return None, None
 
 
 def save_metadata(video_data, run_id):
@@ -139,20 +145,73 @@ def save_metadata(video_data, run_id):
 def voice_and_save(video_data, run_id):
     # Hook is the spoken opener, so it leads the voiceover.
     spoken_text = f"{video_data['hook']} {video_data['script']}"
-    audio_file = generate_voiceover(spoken_text, OUTPUT_DIR / f"{run_id}.mp3")
+    audio_file, words = generate_voiceover(spoken_text, OUTPUT_DIR / f"{run_id}.mp3")
     video_data["audio_file"] = str(audio_file) if audio_file else None
+    if words:
+        video_data["words"] = words
     save_metadata(video_data, run_id)
     return audio_file
 
 
-def voice_pending():
-    """Voices every saved script that doesn't have an MP3 yet."""
-    pending = []
+def make_and_save_video(video_data, run_id):
+    if not os.environ.get("PEXELS_API_KEY"):
+        print("⏭️ Skipping video: add PEXELS_API_KEY to .env to make videos.")
+        return None
+    from video import make_video
+
+    audio_path = OUTPUT_DIR / f"{run_id}.mp3"
+    video_path = OUTPUT_DIR / f"{run_id}.mp4"
+    try:
+        video_data["broll_credits"] = make_video(video_data, audio_path, video_path)
+    except Exception as e:
+        print(f"❌ Video Error: {e}")
+        video_path.unlink(missing_ok=True)  # don't leave a half-rendered MP4
+        return None
+
+    print(f"✅ Video saved to: {video_path}")
+    video_data["video_file"] = str(video_path)
+    save_metadata(video_data, run_id)
+    return video_path
+
+
+def load_saved(needs_missing, needs_present=None):
+    """Saved scripts missing `needs_missing` (and, if given, having `needs_present`)."""
+    found = []
     for metadata_path in sorted(OUTPUT_DIR.glob("*.json")):
         with open(metadata_path) as f:
             video_data = json.load(f)
-        if not video_data.get("audio_file"):
-            pending.append((metadata_path.stem, video_data))
+        if video_data.get(needs_missing):
+            continue
+        if needs_present and not (OUTPUT_DIR / f"{metadata_path.stem}.mp3").exists():
+            continue
+        found.append((metadata_path.stem, video_data))
+    return found
+
+
+def video_pending():
+    """Makes a video for every voiced script that doesn't have one yet."""
+    pending = load_saved("video_file", needs_present="audio_file")
+    unvoiced = len(load_saved("audio_file"))
+    if unvoiced:
+        print(f"ℹ️ {unvoiced} script(s) have no voiceover yet. Run --voice-pending first.\n")
+    if not pending:
+        print("✅ Nothing to render. Every voiced script already has a video.")
+        return True
+
+    print(f"🎬 Making {len(pending)} video(s)...\n")
+    failed = 0
+    for run_id, video_data in pending:
+        print(f"Hook: {video_data['hook']}")
+        if not make_and_save_video(video_data, run_id):
+            failed += 1
+        print()
+    print(f"Done: {len(pending) - failed} made, {failed} failed.")
+    return failed == 0
+
+
+def voice_pending():
+    """Voices every saved script that doesn't have an MP3 yet."""
+    pending = load_saved("audio_file")
 
     if not pending:
         print("✅ Nothing to voice. Every saved script already has an MP3.")
@@ -182,12 +241,16 @@ if __name__ == "__main__":
     parser.add_argument("--topics-file", help="text file with one topic per line")
     parser.add_argument("--voice-pending", action="store_true",
                         help="make MP3s for saved scripts that don't have one yet")
+    parser.add_argument("--video-pending", action="store_true",
+                        help="make MP4s for voiced scripts that don't have one yet")
     args = parser.parse_args()
 
     OUTPUT_DIR.mkdir(exist_ok=True)
 
     if args.voice_pending:
         sys.exit(0 if voice_pending() else 1)
+    if args.video_pending:
+        sys.exit(0 if video_pending() else 1)
 
     if args.topics_file:
         topics = read_topics(args.topics_file)
@@ -206,8 +269,8 @@ if __name__ == "__main__":
         if args.script_only:
             video_data["audio_file"] = None
             save_metadata(video_data, run_id)
-        else:
-            voice_and_save(video_data, run_id)
+        elif voice_and_save(video_data, run_id):
+            make_and_save_video(video_data, run_id)
         print()
 
     if args.script_only and failed < len(topics):
